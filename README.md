@@ -56,7 +56,7 @@ A powerful Visual Studio Code extension for viewing and analyzing `.vpax` files 
    - Open VS Code
    - Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (Mac)
    - Type "Extensions: Install from VSIX"
-   - Select the `vpax-viewer-0.1.0.vsix` file
+   - Select the `vpax-viewer-0.1.3.vsix` file
 
 3. **Verify installation:**
    - Open any `.vpax` file

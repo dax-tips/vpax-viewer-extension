@@ -167,10 +167,31 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
             top: 0;
             cursor: pointer;
             user-select: none;
+            position: relative;
         }
         
         th:hover {
             background: var(--vscode-list-hoverBackground);
+        }
+        
+        .resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 1;
+        }
+        
+        .resize-handle:hover {
+            background: var(--vscode-focusBorder);
+        }
+        
+        .resizing {
+            cursor: col-resize;
+            user-select: none;
         }
         
         tr:hover {
@@ -307,6 +328,15 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                 <span class="metric">Columns: ${data.totalColumns || 0}</span>
                 ${data.serverName ? `<span class="metric" style="display: block; margin-top: 5px; font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(data.serverName)}">Server: ${this.escapeHtml(data.serverName)}</span>` : ''}
             </div>
+            ${data.storageModeSummary && (data.storageModeSummary.import + data.storageModeSummary.directQuery + data.storageModeSummary.directLake + data.storageModeSummary.dual) > 0 ? `
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
+                <span class="metric" style="font-weight: bold; margin-right: 10px;">Storage Modes:</span>
+                ${data.storageModeSummary.import > 0 ? `<span class="metric">Import: ${data.storageModeSummary.import}</span>` : ''}
+                ${data.storageModeSummary.directQuery > 0 ? `<span class="metric">DirectQuery: ${data.storageModeSummary.directQuery}</span>` : ''}
+                ${data.storageModeSummary.directLake > 0 ? `<span class="metric">DirectLake: ${data.storageModeSummary.directLake}</span>` : ''}
+                ${data.storageModeSummary.dual > 0 ? `<span class="metric">Dual: ${data.storageModeSummary.dual}</span>` : ''}
+            </div>
+            ` : ''}
         </div>
         
         <div class="tabs">
@@ -323,6 +353,7 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                     <tr>
                         <th style="width: 30px;"></th>
                         <th data-sort="name">Table Name</th>
+                        <th data-sort="storageMode">Storage Mode</th>
                         <th data-sort="rowCount" class="number">Rows</th>
                         <th data-sort="totalSize" class="number">Size (MB)</th>
                         <th data-sort="columnCount" class="number">Columns</th>
@@ -348,6 +379,8 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                         <th data-sort="dataSize" class="number">Data Size</th>
                         <th data-sort="dictionarySize" class="number">Dictionary</th>
                         <th data-sort="encoding">Encoding</th>
+                        <th data-sort="temperature" class="number">Temperature</th>
+                        <th data-sort="lastAccessed">Last Accessed</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -472,7 +505,12 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
         
         // Table sorting (works for all tables)
         document.querySelectorAll('th[data-sort]').forEach(header => {
-            header.addEventListener('click', () => {
+            header.addEventListener('click', (e) => {
+                // Don't sort if clicking on resize handle
+                if (e.target.classList.contains('resize-handle')) {
+                    return;
+                }
+                
                 const table = header.closest('table');
                 const tbody = table.querySelector('tbody');
                 const tableId = table.id;
@@ -562,6 +600,67 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                 }
             });
         });
+        
+        // Set default sort for tables-table: Rows descending
+        const tablesTable = document.getElementById('tables-table');
+        if (tablesTable) {
+            const rowsHeader = tablesTable.querySelector('th[data-sort="rowCount"]');
+            if (rowsHeader) {
+                // Pre-set to ascending so the click will make it descending
+                rowsHeader.classList.add('sort-asc');
+                // Trigger click to sort by rows descending (default)
+                rowsHeader.click();
+            }
+        }
+        
+        // Column resizing functionality
+        function makeColumnsResizable(table) {
+            const headers = table.querySelectorAll('thead th');
+            headers.forEach((th, index) => {
+                // Skip the first column (expand icon) and add resize handle
+                if (index === 0 && th.style.width === '30px') return;
+                
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                th.appendChild(resizeHandle);
+                
+                let isResizing = false;
+                let startX = 0;
+                let startWidth = 0;
+                
+                resizeHandle.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startWidth = th.offsetWidth;
+                    
+                    document.body.classList.add('resizing');
+                    e.stopPropagation(); // Prevent triggering sort
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    
+                    const diff = e.clientX - startX;
+                    const newWidth = Math.max(50, startWidth + diff); // Minimum width 50px
+                    th.style.width = newWidth + 'px';
+                    th.style.minWidth = newWidth + 'px';
+                    th.style.maxWidth = newWidth + 'px';
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.classList.remove('resizing');
+                    }
+                });
+            });
+        }
+        
+        // Make all main tables resizable
+        document.querySelectorAll('table[id]').forEach(table => {
+            makeColumnsResizable(table);
+        });
     </script>
 </body>
 </html>`;
@@ -579,6 +678,7 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                         ${hasColumns ? `<span class="expand-icon" data-table="${this.escapeHtml(table.name)}">▶</span>` : ''}
                     </td>
                     <td class="${sizeClass}">${this.escapeHtml(table.name)}</td>
+                    <td>${table.storageMode || 'Unknown'}</td>
                     <td class="number">${this.formatNumber(table.rowCount || 0)}</td>
                     <td class="number">${this.formatBytes(table.totalSize || 0)}</td>
                     <td class="number">${table.columnCount || 0}</td>
@@ -586,7 +686,7 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                 </tr>
                 ${hasColumns ? `
                 <tr class="columns-row" data-table="${this.escapeHtml(table.name)}">
-                    <td colspan="6" style="padding: 0;">
+                    <td colspan="7" style="padding: 0;">
                         <table class="columns-table">
                             <thead>
                                 <tr>
@@ -636,6 +736,13 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
             const hiddenClass = col.isHidden ? 'hidden-column' : '';
             const combinedClass = [rowClass, hiddenClass].filter(c => c).join(' ');
             
+            // Format temperature with 2 decimal places
+            const temperatureDisplay = col.temperature !== undefined ? 
+                col.temperature.toFixed(2) : '-';
+            
+            // Format last accessed date (keep original format from VPAX)
+            const lastAccessedDisplay = col.lastAccessed || '-';
+            
             return `
                 <tr class="${combinedClass}">
                     <td>${this.escapeHtml(col.tableName)}</td>
@@ -646,6 +753,8 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                     <td class="number">${this.formatNumber(col.dataSize)}</td>
                     <td class="number">${this.formatNumber(col.dictionarySize)}</td>
                     <td>${col.encoding || '-'}</td>
+                    <td class="number">${temperatureDisplay}</td>
+                    <td>${lastAccessedDisplay}</td>
                 </tr>
             `;
         }).join('');

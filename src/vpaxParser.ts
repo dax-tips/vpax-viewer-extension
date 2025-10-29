@@ -15,6 +15,12 @@ export interface VpaxData {
     lastDataRefresh?: string;
     extractionDate?: string;
     serverName?: string;
+    storageModeSummary?: {
+        import: number;
+        directQuery: number;
+        directLake: number;
+        dual: number;
+    };
 }
 
 export interface Table {
@@ -23,6 +29,7 @@ export interface Table {
     totalSize: number;
     columnCount: number;
     relationshipCount: number;
+    storageMode: string;
 }
 
 export interface Column {
@@ -36,6 +43,8 @@ export interface Column {
     encoding: string;
     isHidden: boolean;
     isRowNumber: boolean;
+    temperature?: number;
+    lastAccessed?: string;
 }
 
 export interface Relationship {
@@ -172,13 +181,41 @@ export class VpaxParser {
                 const tableName = table.TableName || table.Table || 'Unknown';
                 const rowCount = table.RowsCount || table.Rows || 0;
                 const tableSize = table.TableSize || table.TotalSize || 0;
+                
+                // Get storage mode from Model.bim partitions
+                let storageMode = 'Unknown';
+                if (modelBim?.model?.tables) {
+                    const modelTable = modelBim.model.tables.find((t: any) => t.name === tableName);
+                    if (modelTable?.partitions && modelTable.partitions.length > 0) {
+                        // Get mode from first partition (usually all partitions have the same mode)
+                        const mode = modelTable.partitions[0].mode || modelTable.partitions[0].type || 'import';
+                        // Normalize mode names to match common terminology
+                        switch (mode.toLowerCase()) {
+                            case 'import':
+                                storageMode = 'Import';
+                                break;
+                            case 'directquery':
+                                storageMode = 'DirectQuery';
+                                break;
+                            case 'directlake':
+                                storageMode = 'DirectLake';
+                                break;
+                            case 'dual':
+                                storageMode = 'Dual';
+                                break;
+                            default:
+                                storageMode = mode;
+                        }
+                    }
+                }
 
                 tables.push({
                     name: tableName,
                     rowCount: rowCount,
                     totalSize: tableSize,
                     columnCount: 0, // Will be calculated later from columns
-                    relationshipCount: 0 // Will be calculated later from relationships
+                    relationshipCount: 0, // Will be calculated later from relationships
+                    storageMode: storageMode
                 });
 
                 totalRows += rowCount;
@@ -190,9 +227,35 @@ export class VpaxParser {
         if (daxVpaView?.Columns) {
             for (const col of daxVpaView.Columns) {
                 const tableName = col.TableName || 'Unknown';
+                const columnName = col.ColumnName || col.Column || 'Unknown';
+                
+                // Get temperature and last accessed from column segments
+                let temperature: number | undefined;
+                let lastAccessed: string | undefined;
+                
+                if (daxVpaView?.ColumnsSegments) {
+                    const columnSegments = daxVpaView.ColumnsSegments.filter(
+                        (seg: any) => seg.TableName === tableName && 
+                                      seg.ColumnName === columnName
+                    );
+                    
+                    // Get temperature and last accessed from segments (use first non-null value)
+                    for (const seg of columnSegments) {
+                        if (temperature === undefined && seg.Temperature !== null && seg.Temperature !== undefined) {
+                            temperature = seg.Temperature;
+                        }
+                        if (lastAccessed === undefined && seg.LastAccessTime) {
+                            lastAccessed = seg.LastAccessTime;
+                        }
+                        if (temperature !== undefined && lastAccessed !== undefined) {
+                            break;
+                        }
+                    }
+                }
+                
                 columns.push({
                     tableName: tableName,
-                    columnName: col.ColumnName || col.Column || 'Unknown',
+                    columnName: columnName,
                     dataType: col.DataType || 'Unknown',
                     cardinality: col.ColumnCardinality || col.Cardinality || 0,
                     size: col.TotalSize || 0,
@@ -200,7 +263,9 @@ export class VpaxParser {
                     dictionarySize: col.DictionarySize || 0,
                     encoding: col.Encoding || 'Unknown',
                     isHidden: col.IsHidden || false,
-                    isRowNumber: col.IsRowNumber || false
+                    isRowNumber: col.IsRowNumber || false,
+                    temperature: temperature,
+                    lastAccessed: lastAccessed
                 });
             }
             totalColumns = columns.length;
@@ -311,6 +376,14 @@ export class VpaxParser {
                          daxModel?.ModelName || 
                          'VPAX Model';
 
+        // Calculate storage mode summary
+        const storageModeSummary = {
+            import: tables.filter(t => t.storageMode === 'Import').length,
+            directQuery: tables.filter(t => t.storageMode === 'DirectQuery').length,
+            directLake: tables.filter(t => t.storageMode === 'DirectLake').length,
+            dual: tables.filter(t => t.storageMode === 'Dual').length
+        };
+
         return {
             modelName,
             tables,
@@ -324,7 +397,8 @@ export class VpaxParser {
             compatibilityMode: daxModel?.CompatibilityMode,
             lastDataRefresh: daxModel?.LastDataRefresh,
             extractionDate: daxModel?.ExtractionDate,
-            serverName: daxModel?.ServerName
+            serverName: daxModel?.ServerName,
+            storageModeSummary: storageModeSummary
         };
     }
 

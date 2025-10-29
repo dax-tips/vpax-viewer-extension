@@ -2,7 +2,7 @@
   "name": "vpax-viewer",
   "displayName": "VertiPaq Analyzer Viewer",
   "description": "View and analyze .vpax files from VertiPaq Analyzer with interactive tables and metrics",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "publisher": "dax-tips",
   "engines": {
     "vscode": "^1.85.0"
