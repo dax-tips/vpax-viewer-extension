@@ -1,0 +1,86 @@
+{
+  "name": "vpax-viewer",
+  "displayName": "VertiPaq Analyzer Viewer",
+  "description": "View and analyze .vpax files from VertiPaq Analyzer with interactive tables and metrics",
+  "version": "0.1.0",
+  "publisher": "dax-tips",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Data Science",
+    "Visualization"
+  ],
+  "keywords": [
+    "vertipaq",
+    "power bi",
+    "dax",
+    "tabular",
+    "analysis services",
+    "vpax",
+    "data model"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dax-tips/vpax-viewer-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dax-tips/vpax-viewer-extension/issues"
+  },
+  "homepage": "https://github.com/dax-tips/vpax-viewer-extension#readme",
+  "license": "MIT",
+  "activationEvents": [
+    "onCustomEditor:vpaxViewer.editor"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "vpaxViewer.editor",
+        "displayName": "VertiPaq Analyzer",
+        "selector": [
+          {
+            "filenamePattern": "*.vpax"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "vpaxViewer.open",
+        "title": "Open with VertiPaq Analyzer",
+        "category": "VPAX"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .vpax",
+          "command": "vpaxViewer.open",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "eslint": "^8.x",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}
