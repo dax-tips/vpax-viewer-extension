@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as JSZip from 'jszip';
 
 export interface VpaxData {
@@ -79,44 +79,84 @@ export class VpaxParser {
     }
 
     async parse(): Promise<VpaxData> {
+        console.log('[VPAX] 🔍 VpaxParser.parse() started for file:', this.filePath);
+        
         try {
-            // Read the .vpax file (it's a ZIP)
-            const fileBuffer = fs.readFileSync(this.filePath);
+            // Check if file exists
+            console.log('[VPAX] 📁 Checking if file exists...');
+            await fs.access(this.filePath);
+            console.log('[VPAX] ✅ File exists and is accessible');
+
+            // Read the .vpax file (it's a ZIP) - using async to prevent UI blocking
+            console.log('[VPAX] 📖 Reading file into memory...');
+            const readStartTime = Date.now();
+            const fileBuffer = await fs.readFile(this.filePath);
+            const readEndTime = Date.now();
+            console.log(`[VPAX] ✅ File read completed in ${readEndTime - readStartTime}ms. Size: ${fileBuffer.length} bytes`);
+            
+            console.log('[VPAX] 📦 Loading ZIP archive...');
+            const zipStartTime = Date.now();
             const zip = await JSZip.loadAsync(fileBuffer);
+            const zipEndTime = Date.now();
+            console.log(`[VPAX] ✅ ZIP loaded in ${zipEndTime - zipStartTime}ms`);
 
             // Try to parse DaxVpaView.json (main statistics file)
+            console.log('[VPAX] 🔍 Looking for DaxVpaView.json...');
             let daxVpaView = null;
             const daxVpaViewFile = zip.file('DaxVpaView.json');
             if (daxVpaViewFile) {
+                console.log('[VPAX] 📄 Found DaxVpaView.json, parsing...');
                 const content = await daxVpaViewFile.async('string');
                 daxVpaView = this.parseJSON(content);
+                console.log('[VPAX] ✅ DaxVpaView.json parsed successfully');
+            } else {
+                console.log('[VPAX] ⚠️ DaxVpaView.json not found');
             }
 
             // Try to parse DaxModel.json (model metadata)
+            console.log('[VPAX] 🔍 Looking for DaxModel.json...');
             let daxModel = null;
             const daxModelFile = zip.file('DaxModel.json');
             if (daxModelFile) {
+                console.log('[VPAX] 📄 Found DaxModel.json, parsing...');
                 const content = await daxModelFile.async('string');
                 daxModel = this.parseJSON(content);
+                console.log('[VPAX] ✅ DaxModel.json parsed successfully');
+            } else {
+                console.log('[VPAX] ⚠️ DaxModel.json not found');
             }
 
             // Try to parse Model.bim (TMSL)
+            console.log('[VPAX] 🔍 Looking for Model.bim...');
             let modelBim = null;
             const modelBimFile = zip.file('Model.bim');
             if (modelBimFile) {
+                console.log('[VPAX] 📄 Found Model.bim, parsing...');
                 const content = await modelBimFile.async('string');
                 modelBim = this.parseJSON(content);
+                console.log('[VPAX] ✅ Model.bim parsed successfully');
+            } else {
+                console.log('[VPAX] ⚠️ Model.bim not found');
             }
 
             // Build the data structure
-            return this.buildVpaxData(daxVpaView, daxModel, modelBim);
+            console.log('[VPAX] 🏗️ Building data structure...');
+            const buildStartTime = Date.now();
+            const result = this.buildVpaxData(daxVpaView, daxModel, modelBim);
+            const buildEndTime = Date.now();
+            console.log(`[VPAX] ✅ Data structure built in ${buildEndTime - buildStartTime}ms`);
+            console.log(`[VPAX] 📊 Result: ${result.tables.length} tables, ${result.columns.length} columns`);
+            
+            return result;
 
         } catch (error) {
+            console.error('[VPAX] ❌ Error in parse():', error);
             throw new Error(`Failed to parse VPAX file: ${error}`);
         }
     }
 
     private buildVpaxData(daxVpaView: any, daxModel: any, modelBim: any): VpaxData {
+        console.log('[VPAX] 🏗️ buildVpaxData started');
         const tables: Table[] = [];
         const columns: Column[] = [];
         const relationships: Relationship[] = [];

@@ -14,7 +14,10 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
         openContext: vscode.CustomDocumentOpenContext,
         token: vscode.CancellationToken
     ): Promise<vscode.CustomDocument> {
-        return { uri, dispose: () => {} };
+        console.log('[VPAX] 📄 openCustomDocument called for:', uri.fsPath);
+        const document = { uri, dispose: () => {} };
+        console.log('[VPAX] ✅ Custom document created');
+        return document;
     }
 
     async resolveCustomEditor(
@@ -22,25 +25,44 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         token: vscode.CancellationToken
     ): Promise<void> {
+        console.log('[VPAX] 🎨 resolveCustomEditor called for:', document.uri.fsPath);
         
-        // Configure webview
-        webviewPanel.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [
-                vscode.Uri.file(path.join(this.context.extensionPath, 'media'))
-            ]
-        };
-
-        // Parse the VPAX file
         try {
+            // Configure webview
+            console.log('[VPAX] ⚙️ Configuring webview options');
+            webviewPanel.webview.options = {
+                enableScripts: true,
+                localResourceRoots: [
+                    vscode.Uri.file(path.join(this.context.extensionPath, 'media'))
+                ]
+            };
+            console.log('[VPAX] ✅ Webview configured');
+
+            // Show loading screen immediately
+            console.log('[VPAX] ⏳ Setting loading screen');
+            webviewPanel.webview.html = this.getLoadingHtml();
+            console.log('[VPAX] ✅ Loading screen displayed');
+
+            // Parse the VPAX file asynchronously
+            console.log('[VPAX] 🔍 Starting VPAX file parsing');
+            const parseStartTime = Date.now();
             const parser = new VpaxParser(document.uri.fsPath);
-            const data = await parser.parse();
+            console.log('[VPAX] 📦 Parser created, calling parse()...');
             
-            // Set webview HTML
+            const data = await parser.parse();
+            const parseEndTime = Date.now();
+            console.log(`[VPAX] ✅ Parsing completed in ${parseEndTime - parseStartTime}ms`);
+            
+            // Set webview HTML with parsed data
+            console.log('[VPAX] 🎨 Generating HTML for webview');
+            const htmlStartTime = Date.now();
             webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, data);
+            const htmlEndTime = Date.now();
+            console.log(`[VPAX] ✅ HTML generated in ${htmlEndTime - htmlStartTime}ms`);
             
             // Handle messages from webview
             webviewPanel.webview.onDidReceiveMessage(message => {
+                console.log('[VPAX] 💬 Message from webview:', message.type);
                 switch (message.type) {
                     case 'alert':
                         vscode.window.showInformationMessage(message.text);
@@ -51,7 +73,10 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
                 }
             });
             
+            console.log('[VPAX] 🎉 Editor resolved successfully');
+            
         } catch (error) {
+            console.error('[VPAX] ❌ Error in resolveCustomEditor:', error);
             webviewPanel.webview.html = this.getErrorHtml(error);
             vscode.window.showErrorMessage(`Failed to open VPAX file: ${error}`);
         }
@@ -717,6 +742,58 @@ export class VpaxEditorProvider implements vscode.CustomReadonlyEditorProvider {
         }
         
         return rows.join('');
+    }
+
+    private getLoadingHtml(): string {
+        return `<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+            padding: 0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .loading-container {
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid var(--vscode-progressBar-background);
+            border-top: 4px solid var(--vscode-button-background);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h2 {
+            margin: 0;
+            font-weight: normal;
+        }
+        p {
+            color: var(--vscode-descriptionForeground);
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <h2>Loading VPAX File...</h2>
+        <p>Parsing VertiPaq Analyzer data</p>
+    </div>
+</body>
+</html>`;
     }
 
     private getErrorHtml(error: any): string {
